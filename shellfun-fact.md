@@ -1,8 +1,10 @@
-# shellfun_factory
+# 定义生成器
 
 往标准输出怼一坨 SHell 函数定义代码的函数。
 
-这大概是元编程，不过现在尚未找到把子环境里的定义直接应用于当前环境的方法，所以我认为这是不完善的元编程。
+~~这大概是元编程，不过现在尚未找到把子环境里的定义直接应用于当前环境的方法，所以我认为这是不完善的元编程。~~
+
+原理：基于 `eval` 实现元编程。
 
 ## 项
 
@@ -52,7 +54,7 @@ elvish --version
 
 你们也可以试试别的，比如 `luajit` 。（其实 `luajit` 反而没必要，这东西直接装就行，才几百 `KiB` 大小。。。当然，万一是在离线环境还又搞不定普通的安装的话，就还是用 OCI 镜像吧。。。）
 
-#### 一些遗憾
+#### ~~一些遗憾~~
 
 其实我的期望是这样使用：
 
@@ -80,5 +82,56 @@ type pypy # 会说这是个函数
 这就是遗憾了。。。。
 
 （至于 `elvish` 的话是使用了完全不同的语法了。我还不知道要怎么把子环境得出的定义应用于当前环境，所以在它里面的这件事，就先放置。）
+
+#### 并不是遗憾
+
+其实上面的用法是可行的，只需要像这样：
+
+~~~~ bash
+eval "$(podman_app_def pypy pypy:slim)"
+~~~~
+
+**只要 `podman_app_def` 里没用到 `declare` ，那么甚至就连 `dash` 等没有 `declare` 内置命令的 SHell 也都能兼容了！！**
+
+原本的 `podman_app_def` 定义是这样的：
+
+~~~ bash
+podman_app_def ()
+{
+    n="${1:-pypy}" &&
+    nn="${2:-${n}}" &&
+    bash -rc "$n"' ()
+    {
+        c_name="${1:-oncerun_$(date +sec%sdot%N)}" &&
+        podman run `case $# in 0) echo -ti ;; *) ;; esac
+        ` --rm --name pdmrun_'"'$n'"'_"$c_name" -v "$PWD":/usr/src/"$c_name" -w /usr/src/"$c_name" '"'$nn'"' '"'$n'"' "$@" ;
+    } &&
+    declare -f -- '"$n" ;
+} ;
+~~~
+
+现在我定义成这样：
+
+~~~~ sh
+podman_app_definer ()
+{
+    n="${1:-pypy}" &&
+    nn="${2:-${n}}" &&
+    eval "$n"' ()
+    {
+        c_name="${1:-oncerun_$(date +sec%sdot%N)}" &&
+        podman run `case $# in 0) echo -ti ;; *) ;; esac
+        ` --rm --name pdmrun_'"'$n'"'_"$c_name" -v "$PWD":/usr/src/"$c_name" -w /usr/src/"$c_name" '"'$nn'"' '"'$n'"' "$@" ;
+    } && echo :ok '"$n"' defined. >&2 || echo :err '"'$n'"' fail-to-define. >&2 ;
+    type declare 2>/dev/null >&2 && declare -f -- '"$n" ;
+} ;
+~~~~
+
+特性：
+
+- 现在只需通过 `podman_app_definer pypy pypy:slim` 完成定义，不需重定向为文件再 `source` 。
+- 仍然保留对定义代码的标准输出，并且在 `declare` 不可用时不做这件事。
+- 基于 `eval` 做到了完整的 *元编程* ，代码基本没有改动。
+- 通过向标准错误产生副作用增加日志功能，并且这不会干扰旧的使用方式。
 
 ### ...
