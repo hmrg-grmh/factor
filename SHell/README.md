@@ -6,6 +6,8 @@
 
 原理：基于 `eval` 实现元编程。
 
+这里借用 `podman run` 示例。
+
 ## 项
 
 ### `podman_app_def`
